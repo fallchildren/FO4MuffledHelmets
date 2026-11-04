@@ -1,0 +1,56 @@
+{
+    "modName": "MuffledHelmets",
+    "displayName": "Muffled Helmets",
+    "minMcmVersion": 1,
+    "pluginRequirements": ["muffledhelmets.esp"],
+    "content": [{
+        "text": "NPC voices",
+        "type": "section"
+    }, {
+        "text": "NPCs wearing helmets, masks or hoods sound muffled like the player. These settings only affect NPCs.",
+        "type": "text"
+    }, {
+        "id": "bNpcVoices:NPCs",
+        "text": "Muffle NPC voices",
+        "type": "switcher",
+        "help": "Muffle the voices of nearby NPCs that wear a helmet, mask or hood. Default: ON",
+        "valueOptions": {
+            "sourceType": "ModSettingBool"
+        }
+    }, {
+        "id": "iNpcRadius:NPCs",
+        "text": "Search radius (meters)",
+        "type": "slider",
+        "help": "NPCs further away than this are not checked. Default: 36",
+        "valueOptions": {
+            "min": 10,
+            "max": 100,
+            "step": 5,
+            "sourceType": "ModSettingInt"
+        }
+    }, {
+        "id": "fNpcInterval:NPCs",
+        "text": "Scan interval (seconds)",
+        "type": "slider",
+        "help": "How often nearby NPCs are checked. Lower values react sooner but cost more script time. Default: 1.0",
+        "valueOptions": {
+            "min": 0.5,
+            "max": 5.0,
+            "step": 0.5,
+            "sourceType": "ModSettingFloat"
+        }
+    }, {
+        "type": "spacer"
+    }, {
+        "text": "Compatibility",
+        "type": "section"
+    }, {
+        "id": "bScanAllSlots:NPCs",
+        "text": "Check all armor slots of NPCs",
+        "type": "switcher",
+        "help": "By default only the head and face slots (30-32 and 46-50, 52) of NPCs are checked. Turn this on if a mod puts a muffling item in another slot. Costs more script time. Default: OFF",
+        "valueOptions": {
+            "sourceType": "ModSettingBool"
+        }
+    }]
+}

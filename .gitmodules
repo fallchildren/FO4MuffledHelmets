@@ -1,0 +1,16 @@
+[submodule "native/extern/commonlibf4"]
+	path = native/extern/commonlibf4
+	url = https://github.com/libxse/commonlibf4
+	shallow = true
+[submodule "native/extern/spdlog"]
+	path = native/extern/spdlog
+	url = https://github.com/gabime/spdlog
+	shallow = true
+[submodule "third_party/Caprica"]
+	path = third_party/Caprica
+	url = https://github.com/fallchildren/Caprica
+	shallow = true
+[submodule "third_party/f4se"]
+	path = third_party/f4se
+	url = https://github.com/ianpatt/f4se
+	shallow = true
