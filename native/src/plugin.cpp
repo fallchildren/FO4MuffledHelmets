@@ -29,9 +29,11 @@
 #include <variant>
 #include <vector>
 
+#include "version.h"
+
 F4SE_PLUGIN_VERSION = []() noexcept {
 	F4SE::PluginVersionData v{};
-	v.PluginVersion({ 3, 2, 0, 0 });
+	v.PluginVersion({ MH_VERSION_MAJOR, MH_VERSION_MINOR, MH_VERSION_PATCH, 0 });
 	v.PluginName("MuffledHelmetsNative");
 	v.AuthorName("fallchildren");
 	v.UsesSigScanning(false);
@@ -501,7 +503,7 @@ namespace
 F4SE_PLUGIN_LOAD(const F4SE::LoadInterface* a_f4se)
 {
 	F4SE::Init(a_f4se, { .trampoline = false });
-	REX::INFO("MuffledHelmetsNative 3.2.0 loaded");
+	REX::INFO("MuffledHelmetsNative " MH_VERSION_STRING " loaded");
 
 	if (const auto* msg = F4SE::GetMessagingInterface()) {
 		msg->RegisterListener(on_message);

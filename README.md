@@ -91,7 +91,7 @@ Use `XWIN_CACHE=/path` to keep the download cache elsewhere.
 | Variable | Default | |
 |----------|---------|-|
 | `ACCEPT_MS_LICENSE` | (empty) | set to `1` to accept the Microsoft SDK license |
-| `VERSION` | nearest Git tag | archive name; must match the plugin version in `plugin.cpp` |
+| `VERSION` | nearest Git tag | archive name and native DLL version |
 | `JEZEBEL` | sibling `../jezebel/bin/jezebel`, else release | PSL compiler |
 | `JEZEBEL_VERSION` | `0.1.0` | release to download when no local Jezebel exists |
 | `JOBS` | `nproc` | parallelism |
@@ -133,9 +133,9 @@ The workflow targets the existing main file:
 - composite mod ID: `4943507426245`
 
 `update_mod_version` is enabled, so the Nexus mod version follows the tag. The
-plugin binary must report the same version as `native/src/plugin.cpp`; tag only
-after bumping it when the plugin changes. The workflow installs the native
-cross-build dependencies and accepts the Microsoft SDK license.
+native version header and DLL metadata are generated from the same tag-derived
+`VERSION`, so no plugin version file needs to be edited. The workflow installs
+the native cross-build dependencies and accepts the Microsoft SDK license.
 
 ## How the voice is changed
 
