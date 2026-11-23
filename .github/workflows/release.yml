@@ -1,0 +1,54 @@
+name: release
+
+on:
+  push:
+    tags:
+      - '[0-9]*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full clang llvm
+          for tool in clang-cl llvm-lib; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              src="$(compgen -G "/usr/lib/llvm-*/bin/$tool" | sort -V | tail -1)"
+              if [ -n "$src" ]; then sudo ln -sf "$src" "/usr/local/bin/$tool"; fi
+            fi
+          done
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release package
+        run: make ACCEPT_MS_LICENSE=1 package VERSION="${GITHUB_REF_NAME}"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/MuffledHelmets-${{ github.ref_name }}.7z
+
+      - name: Upload to Nexus Mods
+        uses: Nexus-Mods/upload-action@v1.0.0-beta.11
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: "3028909"
+          filename: build/MuffledHelmets-${{ github.ref_name }}.7z
+          version: ${{ github.ref_name }}
+          display_name: MuffledHelmets ${{ github.ref_name }}
+          category: main
+          archive_existing_version: true
+          primary_mod_manager_download: true
+          allow_mod_manager_download: true
+          update_mod_version: true
+          mod_id: "4943507426245"

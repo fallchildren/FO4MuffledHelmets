@@ -64,11 +64,11 @@ SCRIPT_BUILD := $(BUILD)/scripts
 PEX     := $(SCRIPT_BUILD)/$(NAME).pex
 PEX_NAT := $(SCRIPT_BUILD)/$(NAME)Native.pex
 PSC     := $(SCRIPT_BUILD)/$(NAME).psc
-DLL     ?= tools/prebuilt/$(NAME)Native.dll
+DLL     := native/build/$(NAME)Native.dll
 ARCHIVE := $(BUILD)/$(NAME)-$(VERSION).7z
 SEVENZ  := $(firstword $(shell command -v 7z 7zz 7za 2>/dev/null))
 
-.PHONY: all bootstrap check-deps submodules toolchain headers pex native package \
+.PHONY: all bootstrap check-deps check-native-deps submodules toolchain headers pex native package \
         clean distclean mrproper
 
 all: pex native package
@@ -142,11 +142,14 @@ $(PEX): $(SRC) $(SRC_NAT) $(wildcard $(STUBS)/*.psc) $(JEZEBEL) $(FLAGS)
 	@test -f $(PEX) -a -f $(PEX_NAT) -a -f $(PSC) || { echo "error: compiler produced no PEX/PSC"; exit 1; }
 
 # F4SE plugin; always delegates, the sub-make decides what is out of date
-native: $(XWIN_DONE) $(STAMP)/submodules
+native: check-native-deps $(XWIN_DONE) $(STAMP)/submodules
 	$(MAKE) -C native -j$(JOBS) TOOLCHAIN=$(TOOLCHAIN)
 
+check-native-deps:
+	@tools/check-native-deps.sh
+
 package: $(ARCHIVE)
-$(ARCHIVE): $(PEX) $(SRC) $(SRC_NAT) $(ESP) $(MCM) $(DLL)
+$(ARCHIVE): $(PEX) $(SRC) $(SRC_NAT) $(ESP) $(MCM) native
 	@test -n "$(SEVENZ)" || { echo "error: 7z not found"; exit 1; }
 	@v="$$(sed -E 's/-.*$$//' <<< '$(VERSION)')"; want="$$(sed -E 's/\./, /g' <<< "$$v")"; \
 	  grep -q "PluginVersion({ $$want, 0 })" native/src/plugin.cpp || \

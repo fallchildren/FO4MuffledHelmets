@@ -35,7 +35,7 @@ released mod:
 5. **pex**: compiles `Data/Scripts/Source/MuffledHelmets.psl` with Jezebel
    (local sibling checkout or a pinned release download)
 6. **native**: cross-builds the F4SE plugin DLL (`native/`)
-7. **package**: builds the `.7z` using the pinned known-good DLL
+7. **package**: builds the `.7z` with the freshly built native DLL
 
 Everything it downloads or builds stays inside this directory
 (`.toolchain/`, `build/`, `native/build/`); nothing is installed system-wide.
@@ -108,10 +108,34 @@ Use `XWIN_CACHE=/path` to keep the download cache elsewhere.
       extern/commonlibf4        submodule (libxse/commonlibf4)
       extern/spdlog             submodule
     third_party/f4se            submodule (ianpatt/f4se, source of the script headers)
-    tools/prebuilt/             pinned known-good native DLL for packaging
     tools/                      check-deps.sh, merge_headers.py, stubs/ (compile-time MCM.psc)
     .toolchain/                 downloaded tools (ignored): xwin, Windows SDK/CRT
     build/                      outputs (ignored)
+
+## Releases
+
+Tag releases without a leading `v`:
+
+```sh
+git tag 3.2.1
+git push origin 3.2.1
+```
+
+The GitHub workflow builds the native DLL and `build/MuffledHelmets-<tag>.7z`,
+then uploads the archive to the Nexus mod page. Configure this repository
+secret:
+
+- `NEXUSMODS_API_KEY` — Nexus API key
+
+The workflow targets the existing main file:
+
+- file ID: `3028909`
+- composite mod ID: `4943507426245`
+
+`update_mod_version` is enabled, so the Nexus mod version follows the tag. The
+plugin binary must report the same version as `native/src/plugin.cpp`; tag only
+after bumping it when the plugin changes. The workflow installs the native
+cross-build dependencies and accepts the Microsoft SDK license.
 
 ## How the voice is changed
 
