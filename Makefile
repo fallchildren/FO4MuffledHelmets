@@ -2,8 +2,8 @@
 #
 # A plain `make` builds everything, bootstrapping what is missing on the way:
 #
-#   checks prerequisites -> submodules -> Windows SDK/CRT (xwin) -> Caprica ->
-#   merged Papyrus headers -> .pex -> F4SE plugin (native/) -> release .7z
+#   checks prerequisites -> submodules -> Windows SDK/CRT (xwin) ->
+#   merged Papyrus headers -> PSL/PEX -> F4SE plugin -> release .7z
 #
 # First run on a new box (accepts the Microsoft SDK license, see README):
 #
@@ -12,11 +12,11 @@
 # Targets:
 #   all        everything below (default)
 #   bootstrap  only fetch/build the external pieces (no mod build)
-#   pex        compile the Papyrus scripts
+#   pex        compile the Papyrus/PSL scripts with Jezebel
 #   native     build the F4SE plugin
 #   package    build/MuffledHelmets-<version>.7z
-#   clean      remove build outputs (keeps Caprica, headers and toolchain)
-#   distclean  clean + Caprica/headers
+#   clean      remove build outputs (keeps headers and toolchain)
+#   distclean  clean + headers/runtime build outputs
 #   mrproper   distclean + the downloaded toolchain (.toolchain/)
 
 .DEFAULT_GOAL := all
@@ -41,9 +41,11 @@ XWIN_CACHE   ?= $(TOOLCHAIN)/xwin-cache
 XWIN         := $(TOOLCHAIN)/bin/xwin
 XWIN_DONE    := $(TOOLCHAIN)/xwin/.splat-done
 
-CAPRICA_SRC   := third_party/Caprica
-CAPRICA_BUILD := $(BUILD)/caprica
-CAPRICA       := $(CAPRICA_BUILD)/Caprica/Caprica
+LOCAL_JEZEBEL := ../jezebel/bin/jezebel
+JEZEBEL_VERSION ?= 0.1.0
+JEZEBEL ?= $(if $(wildcard $(LOCAL_JEZEBEL)),$(LOCAL_JEZEBEL),$(TOOLCHAIN)/jezebel/jezebel)
+JEZEBEL_ASSET := jezebel-$(JEZEBEL_VERSION)-linux-amd64.tar.gz
+JEZEBEL_URL   := https://github.com/fallchildren/jezebel/releases/download/$(JEZEBEL_VERSION)/$(JEZEBEL_ASSET)
 
 F4SE_SCRIPTS := third_party/f4se/scripts
 HEADERS      := $(BUILD)/headers
@@ -51,25 +53,27 @@ FLAGS        := $(HEADERS)/Institute_Papyrus_Flags.flg
 
 # --- mod ---------------------------------------------------------------------
 SRCDIR  := Data/Scripts/Source
-SRC     := $(SRCDIR)/$(NAME).psc
+SRC     := $(SRCDIR)/$(NAME).psl
 SRC_NAT := $(SRCDIR)/$(NAME)Native.psc
 ESP     := Data/muffledhelmets.esp
 MCM_DIR := Data/MCM
 MCM     := $(shell find $(MCM_DIR) -type f 2>/dev/null)
 STUBS   := tools/stubs
 STAGE   := $(BUILD)/stage
-PEX     := $(STAGE)/Data/Scripts/$(NAME).pex
-PEX_NAT := $(STAGE)/Data/Scripts/$(NAME)Native.pex
-DLL     := native/build/$(NAME)Native.dll
+SCRIPT_BUILD := $(BUILD)/scripts
+PEX     := $(SCRIPT_BUILD)/$(NAME).pex
+PEX_NAT := $(SCRIPT_BUILD)/$(NAME)Native.pex
+PSC     := $(SCRIPT_BUILD)/$(NAME).psc
+DLL     ?= tools/prebuilt/$(NAME)Native.dll
 ARCHIVE := $(BUILD)/$(NAME)-$(VERSION).7z
 SEVENZ  := $(firstword $(shell command -v 7z 7zz 7za 2>/dev/null))
 
-.PHONY: all bootstrap check-deps submodules toolchain caprica headers pex \
-        native package clean distclean mrproper
+.PHONY: all bootstrap check-deps submodules toolchain headers pex native package \
+        clean distclean mrproper
 
 all: pex native package
 
-bootstrap: check-deps submodules toolchain caprica headers
+bootstrap: check-deps submodules toolchain headers
 
 # --- bootstrap ---------------------------------------------------------------
 check-deps: $(STAMP)/deps
@@ -102,45 +106,56 @@ $(XWIN_DONE): $(XWIN)
 	    splat --output $(TOOLCHAIN)/xwin
 	@touch $@
 
-caprica: $(CAPRICA)
-$(CAPRICA): $(STAMP)/submodules
-	cmake -S $(CAPRICA_SRC) -B $(CAPRICA_BUILD) -DCMAKE_BUILD_TYPE=Release -Wno-dev
-	cmake --build $(CAPRICA_BUILD) -j$(JOBS)
-	@test -x $@
-
 headers: $(FLAGS)
 $(FLAGS): $(STAMP)/submodules tools/merge_headers.py
 	python3 tools/merge_headers.py $(F4SE_SCRIPTS) $(HEADERS)
 
+$(LOCAL_JEZEBEL):
+	@if [ -x "$(LOCAL_JEZEBEL)" ]; then :; else \
+	  echo "error: $(LOCAL_JEZEBEL) not found"; \
+	  echo "       set JEZEBEL=/path/to/jezebel or JEZEBEL_VERSION=<release>"; \
+	  exit 1; \
+	fi
+
+$(TOOLCHAIN)/jezebel/jezebel:
+	@set -eu; \
+	tmp=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	echo "downloading Jezebel $(JEZEBEL_VERSION)"; \
+	curl -fsSL "$(JEZEBEL_URL)" -o "$$tmp/$(JEZEBEL_ASSET)"; \
+	curl -fsSL "$(JEZEBEL_URL).sha256" -o "$$tmp/$(JEZEBEL_ASSET).sha256"; \
+	(cd "$$tmp" && sha256sum -c "$(JEZEBEL_ASSET).sha256"); \
+	mkdir -p "$(TOOLCHAIN)/jezebel"; \
+	tar -xzf "$$tmp/$(JEZEBEL_ASSET)" -C "$(TOOLCHAIN)/jezebel"; \
+	chmod +x "$@"
+
 # --- build -------------------------------------------------------------------
 pex: $(PEX)
-# -p: parallel mode (serial mode produces no output with the port)
-# --anonymize: no build path, user or host name in the .pex (patched into Caprica)
-# the native stub (declares MuffledHelmetsNative.SetVoiceMuffle) is compiled
-# first; the main script imports it from the source directory. The MCM script
-# (optional runtime dependency) is only declared in $(STUBS) for the compiler.
-$(PEX): $(SRC) $(SRC_NAT) $(wildcard $(STUBS)/*.psc) $(CAPRICA) $(FLAGS)
-	@mkdir -p $(dir $@)
-	@rm -f $@ $(PEX_NAT)
-	$(CAPRICA) -p --ignorecwd --anonymize -g fallout4 -f $(abspath $(FLAGS)) -i $(abspath $(HEADERS)) \
-	    -o $(abspath $(dir $@)) $(abspath $(SRC_NAT))
-	$(CAPRICA) -p --ignorecwd --anonymize -g fallout4 -f $(abspath $(FLAGS)) -i $(abspath $(HEADERS)) \
-	    -i $(abspath $(SRCDIR)) -i $(abspath $(STUBS)) -o $(abspath $(dir $@)) $(abspath $(SRC))
-	@test -f $@ -a -f $(PEX_NAT) || { echo "error: compiler produced no $@"; exit 1; }
+
+$(PEX): $(SRC) $(SRC_NAT) $(wildcard $(STUBS)/*.psc) $(JEZEBEL) $(FLAGS)
+	@mkdir -p $(SCRIPT_BUILD)
+	@rm -f $(PEX) $(PEX_NAT) $(PSC)
+	$(JEZEBEL) -q -I $(abspath $(HEADERS)) -I $(abspath $(SRCDIR)) -I $(abspath $(STUBS)) \
+	    -f $(abspath $(FLAGS)) -o $(abspath $(SCRIPT_BUILD)) $(abspath $(SRC_NAT))
+	$(JEZEBEL) -q -I $(abspath $(HEADERS)) -I $(abspath $(SRCDIR)) -I $(abspath $(STUBS)) \
+	    -f $(abspath $(FLAGS)) -o $(abspath $(SCRIPT_BUILD)) $(abspath $(SRC))
+	@test -f $(PEX) -a -f $(PEX_NAT) -a -f $(PSC) || { echo "error: compiler produced no PEX/PSC"; exit 1; }
 
 # F4SE plugin; always delegates, the sub-make decides what is out of date
 native: $(XWIN_DONE) $(STAMP)/submodules
 	$(MAKE) -C native -j$(JOBS) TOOLCHAIN=$(TOOLCHAIN)
 
 package: $(ARCHIVE)
-$(ARCHIVE): $(PEX) $(SRC) $(SRC_NAT) $(ESP) $(MCM) native
+$(ARCHIVE): $(PEX) $(SRC) $(SRC_NAT) $(ESP) $(MCM) $(DLL)
 	@test -n "$(SEVENZ)" || { echo "error: 7z not found"; exit 1; }
-	@v="$$(sed 's/-dirty$$//' <<< '$(VERSION)')"; want="$$(sed -E 's/\./, /g' <<< "$$v")"; \
+	@v="$$(sed -E 's/-.*$$//' <<< '$(VERSION)')"; want="$$(sed -E 's/\./, /g' <<< "$$v")"; \
 	  grep -q "PluginVersion({ $$want, 0 })" native/src/plugin.cpp || \
 	  { echo "error: plugin version in native/src/plugin.cpp does not match Git tag $$v"; exit 1; }
 	rm -rf $(STAGE)/Data/F4SE $(STAGE)/Data/Scripts/Source $(STAGE)/Data/muffledhelmets.esp $(STAGE)/Data/MCM
 	mkdir -p $(STAGE)/Data/Scripts/Source
+	cp $(PEX) $(PEX_NAT) $(STAGE)/Data/Scripts/
 	cp $(SRC) $(SRC_NAT) $(STAGE)/Data/Scripts/Source/
+	cp $(PSC) $(STAGE)/Data/Scripts/Source/
 	cp $(ESP) $(STAGE)/Data/
 	cp -r $(MCM_DIR) $(STAGE)/Data/
 	mkdir -p $(STAGE)/Data/F4SE/Plugins
@@ -151,7 +166,7 @@ $(ARCHIVE): $(PEX) $(SRC) $(SRC_NAT) $(ESP) $(MCM) native
 
 # --- cleaning ----------------------------------------------------------------
 clean:
-	rm -rf $(STAGE) $(BUILD)/*.7z
+	rm -rf $(STAGE) $(SCRIPT_BUILD) $(BUILD)/*.7z
 	-$(MAKE) -C native clean
 
 distclean: clean

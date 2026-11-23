@@ -1,0 +1,267 @@
+(defscript MuffledHelmets
+  "Muffles the voice of the player and nearby NPCs wearing a helmet, mask or hood."
+  :extends Quest
+
+  ;; set in startup(): is the native plugin loaded?
+  (def Bool native_ok false)
+
+  ;; ---- settings (MCM, optional) --------------------------------------------
+  (def Bool mcm_read false)
+
+  (def-setting Bool npc_voices
+    :fallback true
+    :mcm-id "bNpcVoices:NPCs")
+
+  (def-setting Bool all_slots
+    :fallback false
+    :mcm-id "bScanAllSlots:NPCs")
+
+  (def-setting Int npc_radius_m
+    :getter false
+    :mcm-id "iNpcRadius:NPCs")
+
+  (def-setting Float npc_interval
+    :getter false
+    :mcm-id "fNpcInterval:NPCs")
+
+  (defn npc_radius [] Float
+    (if (and mcm_read (> mcm_npc_radius_m 0))
+      (* (cast mcm_npc_radius_m Float) 70.0)
+      2520.0))
+
+  (defn npc_interval [] Float
+    (if (and mcm_read (>= mcm_npc_interval 0.2))
+      mcm_npc_interval
+      1.0))
+
+  (defn read_mcm_settings [] None
+    (set! mcm_read false)
+    (when (>= (F4SE.GetPluginVersion "F4MCM") 0)
+      (read_setting_npc_voices)
+      (read_setting_all_slots)
+      (read_setting_npc_radius_m)
+      (read_setting_npc_interval)
+      (set! mcm_read true)))
+
+  (defn OnMCMSettingChange [[String modName] [String id]] None
+    (if (= modName "MuffledHelmets")
+      (do
+        (read_mcm_settings)
+        (if native_ok
+          (do
+            (CancelTimer 3)
+            (StartTimer (npc_interval) 3))))))
+
+  ;; ---- cached forms --------------------------------------------------------
+  (def-cached-forms
+    (Keyword kw_actor_npc 0x00013794 "Fallout4.esm")
+    (Keyword kw_force 0x0000000D "muffledhelmets.esp")
+    (Keyword kw_force_cloth 0x00000011 "muffledhelmets.esp")
+    (Keyword kw_force_ignore 0x0000000C "muffledhelmets.esp")
+    (Int som_muffled_2d 0x00000005 "muffledhelmets.esp")
+    (Int som_muffled_3d 0x00000006 "muffledhelmets.esp")
+    (Int som_cloth_2d 0x0000000E "muffledhelmets.esp")
+    (Int som_cloth_3d 0x0000000F "muffledhelmets.esp")
+    (Keyword kw_mask_full 0x0000083A "armorkeywords.esm")
+    (Keyword kw_mask_part 0x00000801 "armorkeywords.esm")
+    (Keyword kw_mouth_slot 0x0000083B "armorkeywords.esm")
+    (Keyword kw_eye_slot 0x0000080C "armorkeywords.esm")
+    (Keyword kw_masked_helmet 0x00000D0C "armorkeywords.esm"))
+
+  ;; ---- hardcoded lists -----------------------------------------------------
+  (def-form-list blacklist
+    (synth-helmet 0x00187976)
+    (eyebot-helmet 0x0000864C "DLCRobot.esm")
+    (lobster-helmet 0x0004FA89 "DLCCoast.esm"))
+
+  (def-form-list forcelist
+    (metro-ppm-88 0x00000F99 "Metro Gas Masks.esp")
+    (metro-m17 0x00002672 "Metro Gas Masks.esp")
+    (metro-pmk1 0x000035A7 "Metro Gas Masks.esp"))
+
+  (def-form-list clothlist
+    (sack-hood-1 0x0018E417)
+    (sack-hood-2 0x0018E419)
+    (sack-hood-3 0x0018E41B)
+    (red-bandana 0x0009C05B)
+    (surgical-mask 0x000787DA)
+    (dc-helmet 0x000AF0F7)
+    (blue-bandana 0x0017E917)
+    (leo-bandana 0x0017E91B)
+    (monkey-bandana 0x0017E91C)
+    (skull-bandana 0x0017E91D)
+    (gun-bandana-2 0x0017E922)
+    (gun-bandana-1 0x0017E923)
+    (stripe-bandana 0x0017E924)
+    (stars-bandana 0x0017E925)
+    (hunters-hood 0x000540FC "DLCCoast.esm")
+    (disciple-1 0x00026BBD "DLCNukaWorld.esm")
+    (disciple-2 0x00026BB7 "DLCNukaWorld.esm")
+    (disciple-hood 0x0003B55D "DLCNukaWorld.esm")
+    (pack-helmet-1 0x00027705 "DLCNukaWorld.esm")
+    (pack-helmet-2 0x00027706 "DLCNukaWorld.esm")
+    (pack-helmet-3 0x00027707 "DLCNukaWorld.esm")
+    (pack-helmet-4 0x00027708 "DLCNukaWorld.esm")
+    (pack-helmet-5 0x0002770A "DLCNukaWorld.esm")
+    (pack-helmet-6 0x0002770B "DLCNukaWorld.esm")
+    (balaclava-1 0x00000F9A "NeoX_Balaclava.esp")
+    (balaclava-2 0x00007468 "NeoX_Balaclava.esp")
+    (balaclava-3 0x00008D9E "NeoX_Balaclava.esp")
+    (balaclava-4 0x00009608 "NeoX_Balaclava.esp")
+    (balaclava-5 0x0000D0D6 "NeoX_Balaclava.esp")
+    (balaclava-6 0x00011C70 "NeoX_Balaclava.esp")
+    (balaclava-7 0x00011C73 "NeoX_Balaclava.esp")
+    (balaclava-8 0x000124DC "NeoX_Balaclava.esp"))
+
+  (defn initialize_lists [] None
+    (init_blacklist)
+    (init_forcelist)
+    (init_clothlist))
+
+  ;; ---- rules ---------------------------------------------------------------
+  (defn is_cloth [[Form item]] Bool
+    (cond
+      (= item None) false
+      (and (not= kw_force_cloth None)
+           (.HasKeyword item kw_force_cloth)) true
+      :else (>= (.Find clothlist (.GetFormId item)) 0)))
+
+  (defn is_blacklisted [[Armor h]] Bool
+    (>= (.Find blacklist (.GetFormId h)) 0))
+
+  (defn is_force [[Armor h]] Bool
+    (>= (.Find forcelist (.GetFormId h)) 0))
+
+  ;; ---- voice ---------------------------------------------------------------
+  (defn get_npc_voice_model [[Armor h]] Int
+    (cond
+      (= h None) 0
+      (is_cloth h) som_cloth_3d
+      :else som_muffled_3d))
+
+  (defn apply_player_voice_helmet [[Armor h]] None
+    (if (= h None)
+      (MuffledHelmetsNative.SetPlayerVoice 0 0)
+      (if (is_cloth h)
+        (MuffledHelmetsNative.SetPlayerVoice som_cloth_2d som_cloth_3d)
+        (MuffledHelmetsNative.SetPlayerVoice som_muffled_2d som_muffled_3d))))
+
+  (defn update_player_voice [] None
+    (let [[Actor player (Game.GetPlayer)]]
+      (apply_player_voice_helmet (get_armor_that_muffles player))))
+
+  (defn npc_scan [] None
+    (when (and native_ok
+               (setting_npc_voices)
+               (not= kw_actor_npc None))
+      (let [[Actor player (Game.GetPlayer)]
+          [[ObjectReference] refs (.FindAllReferencesWithKeyword player kw_actor_npc (npc_radius))]
+          [Bool head_only (not (setting_all_slots))]
+          [Int lease (+ (cast (* (npc_interval) 4.0) Int) 1)]
+          [Int accepted 0]
+          [Int i 0]]
+      (while (and (< i (alength refs)) (< i 16) (< accepted 3))
+        (let [[Actor a (cast (aget refs i) Actor)]]
+          (if (and (not= a None)
+                   (not= a player)
+                   (not (.IsDead a))
+                   (not (.IsDisabled a))
+                   (.Is3DLoaded a))
+            (let [[Armor helmet (get_armor_that_muffles a head_only)]]
+              (if (and (not= helmet None)
+                       (MuffledHelmetsNative.SetActorVoice (.GetFormID a)
+                                                          (get_npc_voice_model helmet)
+                                                          lease))
+                (set! accepted (+ accepted 1))))))
+        (set! i (+ i 1))))))
+
+  (defevent OnTimer [aiTimerID]
+    (if (= aiTimerID 3)
+      (do
+        (npc_scan)
+        (if native_ok
+          (StartTimer (npc_interval) 3)))))
+
+  (defn startup [] None
+    (init_cached_forms)
+    (initialize_lists)
+    (UnregisterForMenuOpenCloseEvent "PipboyMenu")
+    (UnregisterForRemoteEvent (Game.GetPlayer) "OnMenuOpenCloseEvent")
+    (UnregisterForRemoteEvent (Game.GetPlayer) "OnRaceSwitchComplete")
+    (read_mcm_settings)
+    (if mcm_read
+      (RegisterForExternalEvent "OnMCMSettingChange|MuffledHelmets" "OnMCMSettingChange"))
+    (CancelTimer 3)
+    (set! native_ok (>= (F4SE.GetPluginVersion "MuffledHelmetsNative") 0))
+    (if native_ok
+      (StartTimer (npc_interval) 3)
+      (Debug.Notification "MuffledHelmets is inactive: MuffledHelmetsNative.dll is not loaded (see f4se.log)")))
+
+  (defremote on_player_load
+    :from (Game.GetPlayer)
+    :unregister false
+    :event OnPlayerLoadGame
+    [sender]
+    (startup)
+    (if native_ok
+      (update_player_voice)))
+
+  (defremote on_item_equipped
+    :from (Game.GetPlayer)
+    :unregister false
+    :event OnItemEquipped
+    [sender akBaseObject akReference]
+    (if (and native_ok (should_muffle akBaseObject))
+      (apply_player_voice_helmet (cast akBaseObject Armor))))
+
+  (defremote on_item_unequipped
+    :from (Game.GetPlayer)
+    :unregister false
+    :event OnItemUnequipped
+    [sender akBaseObject akReference]
+    (if native_ok
+      (update_player_voice)))
+
+  (defevent OnQuestInit []
+    (startup)
+    (if native_ok
+      (update_player_voice)))
+
+  ;; ---- armor scanning ------------------------------------------------------
+  (defn is_head_slot [[Int slot]] Bool
+    (or (<= slot 2)
+        (and (>= slot 16) (<= slot 20))
+        (= slot 22)))
+
+  (defn get_armor_that_muffles [[Actor a] [Bool head_only false]] Armor
+    (some (fn [slot]
+            (when (or (not head_only) (is_head_slot slot))
+              (let [[Actor:WornItem worn (.GetWornItem a slot)]]
+                (when (should_muffle (.-Item worn))
+                  (cast (.-Item worn) Armor)))))
+          (range 0 23)))
+
+  (defn should_muffle [[Form item]] Bool
+    (cond
+      (= item None) false
+      (.HasKeyword item kw_force_ignore) false
+      (or (.HasKeyword item kw_force)
+          (.HasKeyword item kw_force_cloth)) true
+      :else
+        (let [[Armor armo (cast item Armor)]]
+          (cond
+            (= armo None) false
+            (is_blacklisted armo) false
+            (or (is_cloth armo) (is_force armo)) true
+            (and (not= kw_mask_full None) (.HasKeyword item kw_mask_full)) true
+            (and (not= kw_mask_part None) (.HasKeyword item kw_mask_part)) true
+            (and (not= kw_mouth_slot None)
+                 (.HasKeyword item kw_mouth_slot)
+                 (.HasKeyword item kw_eye_slot)) true
+            (and (not= kw_masked_helmet None) (.HasKeyword item kw_masked_helmet)) true
+            :else (and (has_slot_mask armo kSlotMask49)
+                       (has_slot_mask armo kSlotMask47))))))
+
+  (defn has_slot_mask [[Armor armo] [Int value]] Bool
+    :global true
+    (= (Math.LogicalAnd (.GetSlotMask armo) value) value)))

@@ -9,10 +9,7 @@ ianpatt/f4se ships two directories:
              scripts; files without one are bodies to append to the vanilla
              script of the same name.
 
-The output directory is what Caprica gets as its import path. One tweak is
-applied for Caprica: ObjectReference.psc has a struct member called `parent`,
-which Caprica's lexer treats as the Parent keyword, so it is renamed there
-(declaration only; nothing we compile uses it).
+The output directory is the Papyrus import path used by Jezebel.
 """
 import os
 import re
@@ -71,11 +68,7 @@ def main(src, out):
             print(f"warning: {name}: addition without a vanilla script, skipped")
             skipped += 1
 
-    objref = os.path.join(out, "ObjectReference.psc")
-    if os.path.exists(objref):
-        text = read(objref)
-        text2 = re.sub(r"(?im)^(\s*string\s+)parent(\s*)$", r"\1parent_\2", text)
-        write(objref, text2)
+
 
     print(f"headers: {len(os.listdir(out))} files in {out} "
           f"({merged} merged, {added} added, {skipped} skipped)")

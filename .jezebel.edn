@@ -1,0 +1,4 @@
+{:include-paths ["build/headers"
+                 "Data/Scripts/Source"
+                 "tools/stubs"]
+ :flags "build/headers/Institute_Papyrus_Flags.flg"}
