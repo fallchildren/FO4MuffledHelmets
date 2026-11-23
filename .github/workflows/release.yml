@@ -33,11 +33,6 @@ jobs:
       - name: Build release package
         run: make ACCEPT_MS_LICENSE=1 package VERSION="${GITHUB_REF_NAME}"
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build/MuffledHelmets-${{ github.ref_name }}.7z
-
       - name: Upload to Nexus Mods
         uses: Nexus-Mods/upload-action@v1.0.0-beta.11
         with:
@@ -45,9 +40,9 @@ jobs:
           file_id: "3028909"
           filename: build/MuffledHelmets-${{ github.ref_name }}.7z
           version: ${{ github.ref_name }}
-          display_name: MuffledHelmets ${{ github.ref_name }}
+          display_name: MuffledHelmets
           category: main
-          archive_existing_version: true
+          archive_existing_version: false
           primary_mod_manager_download: true
           allow_mod_manager_download: true
           update_mod_version: true
