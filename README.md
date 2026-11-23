@@ -95,7 +95,7 @@ Use `XWIN_CACHE=/path` to keep the download cache elsewhere.
 | Variable | Default | |
 |----------|---------|-|
 | `ACCEPT_MS_LICENSE` | (empty) | set to `1` to accept the Microsoft SDK license |
-| `VERSION` | contents of `VERSION` | archive name; must match the plugin version in `plugin.cpp` |
+| `VERSION` | nearest Git tag | archive name; must match the plugin version in `plugin.cpp` |
 | `JOBS` | `nproc` | parallelism |
 | `XWIN_VERSION`, `XWIN_CACHE` | `0.10.0`, `.toolchain/xwin-cache` | xwin install |
 

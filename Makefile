@@ -23,9 +23,9 @@
 SHELL := /bin/bash
 
 NAME    ?= MuffledHelmets
-# single source of truth: the VERSION file (the plugin's version in plugin.cpp must
-# match, checked when packaging); "-dirty" marks builds with uncommitted changes
-VERSION ?= $(shell cat VERSION)$(if $(shell git status --porcelain 2>/dev/null),-dirty)
+# single source of truth: the nearest Git tag (the plugin's version in plugin.cpp
+# must match, checked when packaging); "-dirty" marks uncommitted changes
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo 0.0.0)
 JOBS    ?= $(shell nproc 2>/dev/null || echo 4)
 
 ACCEPT_MS_LICENSE ?=
@@ -137,7 +137,7 @@ $(ARCHIVE): $(PEX) $(SRC) $(SRC_NAT) $(ESP) $(MCM) native
 	@test -n "$(SEVENZ)" || { echo "error: 7z not found"; exit 1; }
 	@v="$$(sed 's/-dirty$$//' <<< '$(VERSION)')"; want="$$(sed -E 's/\./, /g' <<< "$$v")"; \
 	  grep -q "PluginVersion({ $$want, 0 })" native/src/plugin.cpp || \
-	  { echo "error: plugin version in native/src/plugin.cpp does not match VERSION $$v"; exit 1; }
+	  { echo "error: plugin version in native/src/plugin.cpp does not match Git tag $$v"; exit 1; }
 	rm -rf $(STAGE)/Data/F4SE $(STAGE)/Data/Scripts/Source $(STAGE)/Data/muffledhelmets.esp $(STAGE)/Data/MCM
 	mkdir -p $(STAGE)/Data/Scripts/Source
 	cp $(SRC) $(SRC_NAT) $(STAGE)/Data/Scripts/Source/
