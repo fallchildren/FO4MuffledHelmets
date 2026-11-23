@@ -7,6 +7,15 @@
 
   ;; ---- settings (MCM, optional) --------------------------------------------
   (def Bool mcm_read false)
+  (def Bool mcm_registered false)
+
+  ;; migration/retry state
+  (def Int save_version 0)
+  (def Int retry_count 0)
+
+  (def Int TIMER_SCAN 3 :const true)
+  (def Int TIMER_RETRY 4 :const true)
+  (def Int RETRY_LIMIT 12 :const true)
 
   (def-setting Bool npc_voices
     :fallback true
@@ -34,6 +43,13 @@
       mcm_npc_interval
       1.0))
 
+  ;; Papyrus timers pause in menus/VATS while the plugin's lease uses real
+  ;; time. Keep a floor large enough to survive a normal menu pause.
+  (defn npc_lease [[Float interval]] Int
+    (if (> (* interval 4.0) 15.0)
+      (+ (cast (* interval 4.0) Int) 5)
+      (+ 15 5)))
+
   (defn read_mcm_settings [] None
     (set! mcm_read false)
     (when (>= (F4SE.GetPluginVersion "F4MCM") 0)
@@ -42,6 +58,22 @@
       (read_setting_npc_radius_m)
       (read_setting_npc_interval)
       (set! mcm_read true)))
+
+  (defn ensure_services [] None
+    (set! native_ok (>= (F4SE.GetPluginVersion "MuffledHelmetsNative") 0))
+    (unless mcm_read
+      (read_mcm_settings))
+    (when (and mcm_read (not mcm_registered))
+      (RegisterForExternalEvent "OnMCMSettingChange|MuffledHelmets" "OnMCMSettingChange")
+      (set! mcm_registered true))
+    (if native_ok
+      (do
+        (CancelTimer TIMER_SCAN)
+        (StartTimer (npc_interval) TIMER_SCAN)
+        (update_player_voice)))
+    (when (and (or (not native_ok) (not mcm_read))
+               (< retry_count RETRY_LIMIT))
+      (StartTimer 5.0 TIMER_RETRY)))
 
   (defn OnMCMSettingChange [[String modName] [String id]] None
     (if (= modName "MuffledHelmets")
@@ -119,18 +151,24 @@
     (init_clothlist))
 
   ;; ---- rules ---------------------------------------------------------------
+  (defn list_has [[[Int] values] [Int id]] Bool
+    (and (not= values None)
+         (> (alength values) 0)
+         (> id 0)
+         (>= (.Find values id) 0)))
+
   (defn is_cloth [[Form item]] Bool
     (cond
       (= item None) false
       (and (not= kw_force_cloth None)
            (.HasKeyword item kw_force_cloth)) true
-      :else (>= (.Find clothlist (.GetFormId item)) 0)))
+      :else (list_has clothlist (.GetFormId item))))
 
   (defn is_blacklisted [[Armor h]] Bool
-    (>= (.Find blacklist (.GetFormId h)) 0))
+    (list_has blacklist (.GetFormId h)))
 
   (defn is_force [[Armor h]] Bool
-    (>= (.Find forcelist (.GetFormId h)) 0))
+    (list_has forcelist (.GetFormId h)))
 
   ;; ---- voice ---------------------------------------------------------------
   (defn get_npc_voice_model [[Armor h]] Int
@@ -157,7 +195,7 @@
       (let [[Actor player (Game.GetPlayer)]
           [[ObjectReference] refs (.FindAllReferencesWithKeyword player kw_actor_npc (npc_radius))]
           [Bool head_only (not (setting_all_slots))]
-          [Int lease (+ (cast (* (npc_interval) 4.0) Int) 1)]
+          [Int lease (npc_lease (npc_interval))]
           [Int accepted 0]
           [Int i 0]]
       (while (and (< i (alength refs)) (< i 16) (< accepted 3))
@@ -176,25 +214,33 @@
         (set! i (+ i 1))))))
 
   (defevent OnTimer [aiTimerID]
-    (if (= aiTimerID 3)
+    (cond
+      (= aiTimerID TIMER_SCAN)
       (do
         (npc_scan)
         (if native_ok
-          (StartTimer (npc_interval) 3)))))
+          (StartTimer (npc_interval) TIMER_SCAN)))
+
+      (= aiTimerID TIMER_RETRY)
+      (do
+        (set! retry_count (+ retry_count 1))
+        (ensure_services))))
 
   (defn startup [] None
     (init_cached_forms)
     (initialize_lists)
-    (UnregisterForMenuOpenCloseEvent "PipboyMenu")
-    (UnregisterForRemoteEvent (Game.GetPlayer) "OnMenuOpenCloseEvent")
-    (UnregisterForRemoteEvent (Game.GetPlayer) "OnRaceSwitchComplete")
-    (read_mcm_settings)
-    (if mcm_read
-      (RegisterForExternalEvent "OnMCMSettingChange|MuffledHelmets" "OnMCMSettingChange"))
-    (CancelTimer 3)
-    (set! native_ok (>= (F4SE.GetPluginVersion "MuffledHelmetsNative") 0))
-    (if native_ok
-      (StartTimer (npc_interval) 3)
+    ;; One-time cleanup for saves made by older versions that registered
+    ;; these events. New saves never enter this block.
+    (when (< save_version 1)
+      (UnregisterForMenuOpenCloseEvent "PipboyMenu")
+      (UnregisterForRemoteEvent (Game.GetPlayer) "OnMenuOpenCloseEvent")
+      (UnregisterForRemoteEvent (Game.GetPlayer) "OnRaceSwitchComplete")
+      (set! save_version 1))
+    (CancelTimer TIMER_SCAN)
+    (CancelTimer TIMER_RETRY)
+    (set! retry_count 0)
+    (ensure_services)
+    (if (not native_ok)
       (Debug.Notification "MuffledHelmets is inactive: MuffledHelmetsNative.dll is not loaded (see f4se.log)")))
 
   (defremote on_player_load
@@ -211,8 +257,8 @@
     :unregister false
     :event OnItemEquipped
     [sender akBaseObject akReference]
-    (if (and native_ok (should_muffle akBaseObject))
-      (apply_player_voice_helmet (cast akBaseObject Armor))))
+    (if native_ok
+      (update_player_voice)))
 
   (defremote on_item_unequipped
     :from (Game.GetPlayer)
